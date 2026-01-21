@@ -325,13 +325,19 @@ const App = () => {
         const examTotal = parseVal(activeCourse.exam.total);
         const examAvg = examTotal > 0 ? (examScore / examTotal) * 100 : 0;
 
-        const finalGrade = (courseworkAvg * 0.70) + (fptAvg * 0.15) + (examAvg * 0.15);
+        // Use dynamic weights from course settings
+        const fptWeight = parseVal(activeCourse.fptParts.reduce((sum, p) => sum + parseVal(p.weight), 0)) || 15;
+        const examWeight = parseVal(activeCourse.exam.weight) || 15;
+        const courseworkWeight = 100 - fptWeight - examWeight;
 
-        const currentPoints = (courseworkAvg * 0.70);
-        const neededFromFinal30 = activeCourse.target - currentPoints;
-        const requiredEvalAvg = (neededFromFinal30 / 0.30);
+        const finalGrade = (courseworkAvg * (courseworkWeight / 100)) + (fptAvg * (fptWeight / 100)) + (examAvg * (examWeight / 100));
 
-        return { courseworkAvg, fptAvg, examAvg, finalGrade, requiredEvalAvg };
+        const currentPoints = (courseworkAvg * (courseworkWeight / 100));
+        const evalWeight = fptWeight + examWeight;
+        const neededFromFinal = activeCourse.target - currentPoints;
+        const requiredEvalAvg = evalWeight > 0 ? (neededFromFinal / (evalWeight / 100)) : 0;
+
+        return { courseworkAvg, fptAvg, examAvg, finalGrade, requiredEvalAvg, courseworkWeight, fptWeight, examWeight };
     }, [activeCourse]);
 
     const updateCourseField = (id, field, value) => {
@@ -777,7 +783,7 @@ const App = () => {
                                 <div className="p-4 px-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                                     <div className="flex items-center gap-2">
                                         <Target size={18} className="text-blue-400" />
-                                        <h3 className="font-bold text-sm tracking-tight">Final Evaluation (30% Total)</h3>
+                                        <h3 className="font-bold text-sm tracking-tight">Final Evaluation ({stats.fptWeight + stats.examWeight}% Total)</h3>
                                     </div>
                                     <div className="flex gap-4">
                                         <div className="text-center">
@@ -797,7 +803,7 @@ const App = () => {
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-2">
                                                 <Layers size={16} className="text-blue-400" />
-                                                <span className="text-xs font-black uppercase tracking-widest text-slate-300">FPT Tasks (15%)</span>
+                                                <span className="text-xs font-black uppercase tracking-widest text-slate-300">FPT Tasks ({stats.fptWeight}%)</span>
                                             </div>
                                             <button onClick={addFptPart} className="text-[10px] bg-blue-600 px-2 py-0.5 rounded hover:bg-blue-700 transition-colors font-bold uppercase">Add Task</button>
                                         </div>
@@ -850,9 +856,11 @@ const App = () => {
 
                                     {/* Exam Column */}
                                     <div className="space-y-4 border-l border-slate-800 pl-0 md:pl-8">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                            <span className="text-xs font-black uppercase tracking-widest text-slate-300">Final Exam (15%)</span>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                                <span className="text-xs font-black uppercase tracking-widest text-slate-300">Final Exam ({stats.examWeight}%)</span>
+                                            </div>
                                         </div>
                                         <div className="bg-blue-900/10 p-5 rounded-2xl border border-blue-500/20 space-y-4">
                                             <div>
@@ -870,9 +878,18 @@ const App = () => {
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="pt-2 border-t border-slate-800/50">
-                                                <p className="text-[10px] text-slate-500 uppercase font-bold text-center">Exam Percentage</p>
-                                                <p className="text-2xl font-black text-center text-blue-400 tracking-tight">{stats.examAvg.toFixed(1)}%</p>
+                                            <div className="flex items-center justify-between gap-4">
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Weight %</label>
+                                                    <input
+                                                        type="text" className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-bold w-16 outline-none focus:border-blue-500 text-center text-blue-400"
+                                                        value={activeCourse.exam.weight} onChange={(e) => updateExamField('weight', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="flex-1 text-right">
+                                                    <p className="text-[10px] text-slate-500 uppercase font-bold">Exam %</p>
+                                                    <p className="text-xl font-black text-blue-400 tracking-tight">{stats.examAvg.toFixed(1)}%</p>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -883,7 +900,7 @@ const App = () => {
                             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                                 <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
                                     <h2 className="text-lg font-semibold flex items-center gap-2">
-                                        <BookOpen className="text-blue-500" size={20} /> Coursework Ledger (70%)
+                                        <BookOpen className="text-blue-500" size={20} /> Coursework Ledger ({stats.courseworkWeight}%)
                                     </h2>
                                     <button
                                         onClick={() => {
@@ -972,7 +989,7 @@ const App = () => {
                                 <div className="space-y-5">
                                     <div className="flex flex-col gap-1.5">
                                         <div className="flex justify-between items-end">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Coursework (70%)</span>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Coursework ({stats.courseworkWeight}%)</span>
                                             <span className="text-sm font-bold text-slate-900">{stats.courseworkAvg.toFixed(1)}%</span>
                                         </div>
                                         <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
@@ -982,7 +999,7 @@ const App = () => {
 
                                     <div className="flex flex-col gap-1.5">
                                         <div className="flex justify-between items-end">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">FPT Category (15%)</span>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">FPT Category ({stats.fptWeight}%)</span>
                                             <span className="text-sm font-bold text-slate-900">{stats.fptAvg.toFixed(1)}%</span>
                                         </div>
                                         <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
@@ -992,7 +1009,7 @@ const App = () => {
 
                                     <div className="flex flex-col gap-1.5 pb-4">
                                         <div className="flex justify-between items-end">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Final Exam (15%)</span>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Final Exam ({stats.examWeight}%)</span>
                                             <span className="text-sm font-bold text-slate-900">{stats.examAvg.toFixed(1)}%</span>
                                         </div>
                                         <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
@@ -1094,3 +1111,4 @@ const App = () => {
 };
 
 export default App;
+
