@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     Calculator,
     Plus,
@@ -16,16 +16,39 @@ import {
     LogOut,
     Save,
     Upload,
-    X
+    X,
+    User,
+    Lock,
+    Cloud,
+    CloudOff,
+    RefreshCw
 } from 'lucide-react';
 
 const STORAGE_KEY = 'markbook_courses';
+const AUTH_KEY = 'markbook_auth';
+const API_URL = 'http://localhost:3001/api';
 
 // Empty default - users will add their own courses
 const defaultCourses = [];
 
 const App = () => {
     const [view, setView] = useState('start');
+    const [authView, setAuthView] = useState(null); // 'login' or 'register'
+    const [user, setUser] = useState(() => {
+        const saved = localStorage.getItem(AUTH_KEY);
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                return null;
+            }
+        }
+        return null;
+    });
+    const [authError, setAuthError] = useState('');
+    const [authLoading, setAuthLoading] = useState(false);
+    const [syncStatus, setSyncStatus] = useState('');
+
     const [courses, setCourses] = useState(() => {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
@@ -55,9 +78,126 @@ const App = () => {
     const [showImportModal, setShowImportModal] = useState(false);
     const [importText, setImportText] = useState('');
 
+    // Auth form state
+    const [authUsername, setAuthUsername] = useState('');
+    const [authPassword, setAuthPassword] = useState('');
+
     const activeCourse = useMemo(() => {
         return courses.find(c => c.id === activeCourseId) || courses[0] || null;
     }, [courses, activeCourseId]);
+
+    // Load data from server on login
+    useEffect(() => {
+        if (user && user.token) {
+            fetchCloudData();
+        }
+    }, [user]);
+
+    const fetchCloudData = async () => {
+        if (!user || !user.token) return;
+
+        try {
+            setSyncStatus('Loading...');
+            const response = await fetch(`${API_URL}/data`, {
+                headers: {
+                    'Authorization': `Bearer ${user.token}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.courses && data.courses.length > 0) {
+                    setCourses(data.courses);
+                    setActiveCourseId(data.courses[0]?.id || null);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data.courses));
+                }
+                setSyncStatus('');
+            } else {
+                setSyncStatus('');
+            }
+        } catch (error) {
+            console.error('Fetch cloud data error:', error);
+            setSyncStatus('');
+        }
+    };
+
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        setAuthError('');
+        setAuthLoading(true);
+
+        try {
+            const response = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: authUsername, password: authPassword })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                const userData = { token: data.token, username: data.user.username, id: data.user.id };
+                setUser(userData);
+                localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
+
+                // Load courses from server
+                if (data.courses && data.courses.length > 0) {
+                    setCourses(data.courses);
+                    setActiveCourseId(data.courses[0]?.id || null);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data.courses));
+                }
+
+                setAuthView(null);
+                setAuthUsername('');
+                setAuthPassword('');
+                setView('dashboard');
+            } else {
+                setAuthError(data.error || 'Login failed');
+            }
+        } catch (error) {
+            setAuthError('Cannot connect to server. Make sure the server is running.');
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
+    const handleRegister = async (e) => {
+        e.preventDefault();
+        setAuthError('');
+        setAuthLoading(true);
+
+        try {
+            const response = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: authUsername, password: authPassword })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                const userData = { token: data.token, username: data.user.username, id: data.user.id };
+                setUser(userData);
+                localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
+                setAuthView(null);
+                setAuthUsername('');
+                setAuthPassword('');
+                setView('dashboard');
+            } else {
+                setAuthError(data.error || 'Registration failed');
+            }
+        } catch (error) {
+            setAuthError('Cannot connect to server. Make sure the server is running.');
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
+    const handleLogout = () => {
+        setUser(null);
+        localStorage.removeItem(AUTH_KEY);
+        setView('start');
+    };
 
     const handleSave = () => {
         try {
@@ -68,6 +208,38 @@ const App = () => {
             console.error('Failed to save:', e);
             setSaveStatus('Error saving');
             setTimeout(() => setSaveStatus(''), 2000);
+        }
+    };
+
+    const handleCloudSync = async () => {
+        if (!user || !user.token) {
+            setSaveStatus('Login required');
+            setTimeout(() => setSaveStatus(''), 2000);
+            return;
+        }
+
+        try {
+            setSyncStatus('Syncing...');
+            const response = await fetch(`${API_URL}/data`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${user.token}`
+                },
+                body: JSON.stringify({ courses })
+            });
+
+            if (response.ok) {
+                setSyncStatus('Synced!');
+                setTimeout(() => setSyncStatus(''), 2000);
+            } else {
+                setSyncStatus('Sync failed');
+                setTimeout(() => setSyncStatus(''), 2000);
+            }
+        } catch (error) {
+            console.error('Cloud sync error:', error);
+            setSyncStatus('Server offline');
+            setTimeout(() => setSyncStatus(''), 2000);
         }
     };
 
@@ -237,6 +409,159 @@ const App = () => {
         startRenaming(newCourse);
     };
 
+    // --- AUTH SCREENS ---
+    if (authView === 'login') {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-900 font-sans">
+                <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-10 border border-slate-100">
+                    <button
+                        onClick={() => { setAuthView(null); setAuthError(''); }}
+                        className="text-slate-400 hover:text-slate-600 mb-4 flex items-center gap-1 text-sm"
+                    >
+                        ← Back
+                    </button>
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+                            <User className="text-white" size={24} />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black">Login</h2>
+                            <p className="text-sm text-slate-500">Access your account</p>
+                        </div>
+                    </div>
+
+                    {authError && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl mb-4 text-sm">
+                            {authError}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Username</label>
+                            <div className="relative">
+                                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input
+                                    type="text"
+                                    value={authUsername}
+                                    onChange={(e) => setAuthUsername(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 pl-10 outline-none focus:border-blue-500"
+                                    placeholder="Enter username"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Password</label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input
+                                    type="password"
+                                    value={authPassword}
+                                    onChange={(e) => setAuthPassword(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 pl-10 outline-none focus:border-blue-500"
+                                    placeholder="Enter password"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={authLoading}
+                            className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50"
+                        >
+                            {authLoading ? 'Logging in...' : 'Login'}
+                        </button>
+                    </form>
+
+                    <p className="text-center text-sm text-slate-500 mt-6">
+                        Don't have an account?{' '}
+                        <button onClick={() => { setAuthView('register'); setAuthError(''); }} className="text-blue-600 font-bold hover:underline">
+                            Create one
+                        </button>
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    if (authView === 'register') {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-900 font-sans">
+                <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-10 border border-slate-100">
+                    <button
+                        onClick={() => { setAuthView(null); setAuthError(''); }}
+                        className="text-slate-400 hover:text-slate-600 mb-4 flex items-center gap-1 text-sm"
+                    >
+                        ← Back
+                    </button>
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center">
+                            <User className="text-white" size={24} />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black">Create Account</h2>
+                            <p className="text-sm text-slate-500">Sync across devices</p>
+                        </div>
+                    </div>
+
+                    {authError && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl mb-4 text-sm">
+                            {authError}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleRegister} className="space-y-4">
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Username</label>
+                            <div className="relative">
+                                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input
+                                    type="text"
+                                    value={authUsername}
+                                    onChange={(e) => setAuthUsername(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 pl-10 outline-none focus:border-blue-500"
+                                    placeholder="Choose a username (min 3 chars)"
+                                    minLength={3}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Password</label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input
+                                    type="password"
+                                    value={authPassword}
+                                    onChange={(e) => setAuthPassword(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 pl-10 outline-none focus:border-blue-500"
+                                    placeholder="Choose a password (min 4 chars)"
+                                    minLength={4}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={authLoading}
+                            className="w-full bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-100 disabled:opacity-50"
+                        >
+                            {authLoading ? 'Creating...' : 'Create Account'}
+                        </button>
+                    </form>
+
+                    <p className="text-center text-sm text-slate-500 mt-6">
+                        Already have an account?{' '}
+                        <button onClick={() => { setAuthView('login'); setAuthError(''); }} className="text-blue-600 font-bold hover:underline">
+                            Login
+                        </button>
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     // --- RENDERING START SCREEN ---
     if (view === 'start') {
         return (
@@ -260,6 +585,24 @@ const App = () => {
                                 <p className="text-xs font-semibold">Coursework + FPT + Exam</p>
                             </div>
                         </div>
+                        {user && (
+                            <div className="flex items-center gap-4 bg-green-50 p-4 rounded-2xl border border-green-100">
+                                <div className="bg-green-100 p-2.5 rounded-xl text-green-600">
+                                    <Cloud size={20} />
+                                </div>
+                                <div className="text-left flex-1">
+                                    <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest">Logged In</p>
+                                    <p className="text-xs font-semibold">{user.username}</p>
+                                </div>
+                                <button
+                                    onClick={handleLogout}
+                                    className="text-slate-400 hover:text-red-500 p-2"
+                                    title="Logout"
+                                >
+                                    <LogOut size={16} />
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <button
@@ -268,6 +611,23 @@ const App = () => {
                     >
                         Open Mark Book <ChevronRight size={20} />
                     </button>
+
+                    {!user && (
+                        <div className="w-full mt-4 flex gap-3">
+                            <button
+                                onClick={() => setAuthView('login')}
+                                className="flex-1 bg-slate-100 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200 transition-all"
+                            >
+                                <User size={18} /> Login
+                            </button>
+                            <button
+                                onClick={() => setAuthView('register')}
+                                className="flex-1 bg-green-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-green-700 transition-all"
+                            >
+                                <Plus size={18} /> Create Account
+                            </button>
+                        </div>
+                    )}
                 </div>
                 <p className="mt-8 text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] opacity-50">
                     Ontario Based Curriculum Mark Book
@@ -351,6 +711,16 @@ const App = () => {
                                 <Save size={16} />
                                 Save
                             </button>
+                            {user && (
+                                <button
+                                    onClick={handleCloudSync}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-md text-sm font-bold"
+                                    title="Sync to cloud"
+                                >
+                                    <Cloud size={16} />
+                                    Sync
+                                </button>
+                            )}
                             <button
                                 onClick={() => setShowImportModal(true)}
                                 className="flex items-center gap-2 px-3 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-all text-sm font-medium"
@@ -358,15 +728,22 @@ const App = () => {
                             >
                                 <Upload size={16} />
                             </button>
-                            {saveStatus && (
-                                <span className="text-green-600 text-sm font-bold animate-pulse">{saveStatus}</span>
+                            {(saveStatus || syncStatus) && (
+                                <span className="text-green-600 text-sm font-bold animate-pulse">{saveStatus || syncStatus}</span>
                             )}
                         </div>
                         <div className="text-right">
                             <h1 className="text-xl font-bold text-slate-900 leading-tight flex items-center justify-end gap-2">
                                 <Calculator className="text-blue-600" size={20} /> Mark Book
                             </h1>
-                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">70/15/15 Curriculum Model</p>
+                            <div className="flex items-center gap-2 justify-end">
+                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">70/15/15 Curriculum Model</p>
+                                {user && (
+                                    <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                        <Cloud size={10} /> {user.username}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </header>
