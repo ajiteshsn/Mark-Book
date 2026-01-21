@@ -280,9 +280,24 @@ const App = () => {
                                             {course.name}
                                         </button>
                                         {activeCourseId === course.id && (
-                                            <button onClick={() => startRenaming(course)} className="p-1.5 text-slate-400 hover:text-blue-500">
-                                                <Edit2 size={14} />
-                                            </button>
+                                            <>
+                                                <button onClick={() => startRenaming(course)} className="p-1.5 text-slate-400 hover:text-blue-500" title="Rename course">
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm('Permanently delete this course?')) {
+                                                            const next = courses.filter(c => c.id !== activeCourseId);
+                                                            setCourses(next);
+                                                            setActiveCourseId(next[0]?.id || null);
+                                                        }
+                                                    }}
+                                                    className="p-1.5 text-slate-400 hover:text-red-500"
+                                                    title="Delete course"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 )}
@@ -604,18 +619,7 @@ const App = () => {
                                         <span className="text-sm font-black w-10 text-slate-700">{activeCourse.target}%</span>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => {
-                                        if (confirm('Permanently delete this course?')) {
-                                            const next = courses.filter(c => c.id !== activeCourseId);
-                                            setCourses(next);
-                                            setActiveCourseId(next[0]?.id || null);
-                                        }
-                                    }}
-                                    className="w-full flex items-center justify-center gap-2 py-3 text-[10px] text-red-500 font-black border border-red-200 rounded-xl hover:bg-red-50 transition-colors uppercase tracking-widest"
-                                >
-                                    <Trash size={12} /> Clear Record
-                                </button>
+
                             </div>
 
                             <div className="text-center">
