@@ -15,7 +15,8 @@ import {
     ChevronRight,
     LogOut,
     Save,
-    Download
+    Upload,
+    X
 } from 'lucide-react';
 
 const STORAGE_KEY = 'markbook_courses';
@@ -51,6 +52,8 @@ const App = () => {
     const [editingNameId, setEditingNameId] = useState(null);
     const [tempName, setTempName] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importText, setImportText] = useState('');
 
     const activeCourse = useMemo(() => {
         return courses.find(c => c.id === activeCourseId) || courses[0] || null;
@@ -68,17 +71,48 @@ const App = () => {
         }
     };
 
-    const handleExport = () => {
-        const dataStr = JSON.stringify(courses, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'markbook_data.json';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+    const handleImport = () => {
+        if (!activeCourse || !importText.trim()) {
+            setShowImportModal(false);
+            setImportText('');
+            return;
+        }
+
+        const lines = importText.trim().split('\n');
+        const newAssessments = [];
+
+        lines.forEach(line => {
+            const parts = line.split(/[,\t]+/).map(p => p.trim());
+            if (parts.length >= 2) {
+                // Format: category, score, total (optional), weight (optional)
+                // or just: category, score (assumes total=100, weight=1)
+                const cat = parts[0] || 'ITEM';
+                const score = parts[1] || '';
+                const total = parts[2] || '100';
+                const weight = parts[3] || '1';
+
+                newAssessments.push({
+                    id: Date.now() + Math.random(),
+                    cat: cat.toUpperCase(),
+                    score: score,
+                    total: total,
+                    weight: weight,
+                    active: true
+                });
+            }
+        });
+
+        if (newAssessments.length > 0) {
+            updateCourseField(activeCourseId, 'assessments', [
+                ...activeCourse.assessments,
+                ...newAssessments
+            ]);
+            setSaveStatus(`Added ${newAssessments.length} entries!`);
+            setTimeout(() => setSaveStatus(''), 2000);
+        }
+
+        setShowImportModal(false);
+        setImportText('');
     };
 
     const stats = useMemo(() => {
@@ -318,11 +352,11 @@ const App = () => {
                                 Save
                             </button>
                             <button
-                                onClick={handleExport}
+                                onClick={() => setShowImportModal(true)}
                                 className="flex items-center gap-2 px-3 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-all text-sm font-medium"
-                                title="Export as JSON file"
+                                title="Import assessments from text"
                             >
-                                <Download size={16} />
+                                <Upload size={16} />
                             </button>
                             {saveStatus && (
                                 <span className="text-green-600 text-sm font-bold animate-pulse">{saveStatus}</span>
@@ -631,6 +665,53 @@ const App = () => {
                     </div>
                 )}
             </div>
+
+            {/* Import Modal */}
+            {showImportModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-slate-800">Import Assessments</h3>
+                            <button
+                                onClick={() => { setShowImportModal(false); setImportText(''); }}
+                                className="text-slate-400 hover:text-slate-600"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <p className="text-sm text-slate-500 mb-3">
+                            Paste your data below. Each line should be: <br />
+                            <code className="bg-slate-100 px-2 py-0.5 rounded text-xs">category, score, total, weight</code>
+                        </p>
+                        <p className="text-xs text-slate-400 mb-4">
+                            Example: <code className="bg-slate-100 px-1 rounded">Quiz, 85, 100, 1</code> or just <code className="bg-slate-100 px-1 rounded">Test, 92</code> (defaults: total=100, weight=1)
+                        </p>
+
+                        <textarea
+                            value={importText}
+                            onChange={(e) => setImportText(e.target.value)}
+                            placeholder="Quiz, 85, 100, 1&#10;Test, 92, 100, 2&#10;Assignment, 78, 100, 1"
+                            className="w-full h-48 border border-slate-200 rounded-xl p-4 text-sm font-mono outline-none focus:border-blue-500 resize-none"
+                        />
+
+                        <div className="flex gap-3 mt-4">
+                            <button
+                                onClick={() => { setShowImportModal(false); setImportText(''); }}
+                                className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 font-medium hover:bg-slate-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleImport}
+                                className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors"
+                            >
+                                Import
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
