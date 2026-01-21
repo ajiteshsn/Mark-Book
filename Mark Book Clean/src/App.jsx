@@ -624,7 +624,7 @@ const App = () => {
 
                             <div className="text-center">
                                 <p className="text-[10px] text-slate-400 flex items-center justify-center gap-1 uppercase tracking-widest font-bold opacity-60">
-                                    <Undo2 size={10} /> Tip: Toggle "Sim" checks to simulate drops
+                                    <Undo2 size={10} /> Tip: Toggle "Sim" checks to simulate drops in marks
                                 </p>
                             </div>
                         </div>
