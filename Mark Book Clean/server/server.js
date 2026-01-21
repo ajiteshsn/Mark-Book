@@ -10,8 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001;
-const JWT_SECRET = 'markbook-secret-key-change-in-production';
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'markbook-secret-key-2024';
 const DATA_FILE = path.join(__dirname, 'data.json');
 
 // Middleware
