@@ -26,7 +26,7 @@ import {
 
 const STORAGE_KEY = 'markbook_courses';
 const AUTH_KEY = 'markbook_auth';
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'https://scholr-api.onrender.com/api';
 
 // Empty default - users will add their own courses
 const defaultCourses = [];
