@@ -1,13 +1,8 @@
 [build]
-  # Directory to change to before starting a build
-  base = "/"
-  # Command to build the site
+  base = "Mark Book Clean"
   command = "npm run build"
-  # Directory that contains the deploy-ready HTML files
   publish = "dist"
-
 [[redirects]]
-  # Handle client-side routing for React (SPA)
   from = "/*"
   to = "/index.html"
   status = 200
