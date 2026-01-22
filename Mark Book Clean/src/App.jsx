@@ -21,8 +21,10 @@ import {
     Lock,
     Cloud,
     CloudOff,
-    RefreshCw
+    RefreshCw,
+    TrendingUp
 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 const STORAGE_KEY = 'markbook_courses';
 const AUTH_KEY = 'markbook_auth';
@@ -775,288 +777,368 @@ const App = () => {
 
                 {/* Dashboard Content - Only show if there are courses */}
                 {courses.length > 0 && activeCourse && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-2 space-y-6">
+                    <>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div className="lg:col-span-2 space-y-6">
 
-                            {/* Final Evaluation Section */}
-                            <div className="bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white border border-slate-800">
-                                <div className="p-4 px-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
-                                    <div className="flex items-center gap-2">
-                                        <Target size={18} className="text-blue-400" />
-                                        <h3 className="font-bold text-sm tracking-tight">Final Evaluation ({stats.fptWeight + stats.examWeight}% Total)</h3>
-                                    </div>
-                                    <div className="flex gap-4">
-                                        <div className="text-center">
-                                            <p className="text-[8px] font-bold text-slate-500 uppercase">FPT Result</p>
-                                            <p className="text-xs font-mono text-blue-400">{stats.fptAvg.toFixed(1)}%</p>
+                                {/* Final Evaluation Section */}
+                                <div className="bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white border border-slate-800">
+                                    <div className="p-4 px-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                                        <div className="flex items-center gap-2">
+                                            <Target size={18} className="text-blue-400" />
+                                            <h3 className="font-bold text-sm tracking-tight">Final Evaluation ({stats.fptWeight + stats.examWeight}% Total)</h3>
                                         </div>
-                                        <div className="text-center border-l border-slate-700 pl-4">
-                                            <p className="text-[8px] font-bold text-slate-500 uppercase">Exam Result</p>
-                                            <p className="text-xs font-mono text-blue-400">{stats.examAvg.toFixed(1)}%</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    {/* FPT Column */}
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <Layers size={16} className="text-blue-400" />
-                                                <span className="text-xs font-black uppercase tracking-widest text-slate-300">FPT Tasks ({stats.fptWeight}%)</span>
+                                        <div className="flex gap-4">
+                                            <div className="text-center">
+                                                <p className="text-[8px] font-bold text-slate-500 uppercase">FPT Result</p>
+                                                <p className="text-xs font-mono text-blue-400">{stats.fptAvg.toFixed(1)}%</p>
                                             </div>
-                                            <button onClick={addFptPart} className="text-[10px] bg-blue-600 px-2 py-0.5 rounded hover:bg-blue-700 transition-colors font-bold uppercase">Add Task</button>
+                                            <div className="text-center border-l border-slate-700 pl-4">
+                                                <p className="text-[8px] font-bold text-slate-500 uppercase">Exam Result</p>
+                                                <p className="text-xs font-mono text-blue-400">{stats.examAvg.toFixed(1)}%</p>
+                                            </div>
                                         </div>
+                                    </div>
 
-                                        <div className="space-y-3">
-                                            {activeCourse.fptParts.map(p => {
-                                                const partPct = (parseFloat(p.score) / parseFloat(p.total)) * 100;
-                                                return (
-                                                    <div key={p.id} className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 relative group transition-all hover:border-slate-600">
-                                                        <div className="flex justify-between items-center mb-1">
-                                                            <input
-                                                                className="bg-transparent text-[10px] font-bold text-slate-400 uppercase w-full outline-none"
-                                                                value={p.name}
-                                                                onChange={(e) => updateFptField(p.id, 'name', e.target.value)}
-                                                            />
-                                                            {!isNaN(partPct) && isFinite(partPct) && (
-                                                                <span className="text-[10px] font-mono text-blue-400 bg-blue-900/40 px-1.5 rounded">{partPct.toFixed(1)}%</span>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="flex items-center gap-1">
+                                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        {/* FPT Column */}
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Layers size={16} className="text-blue-400" />
+                                                    <span className="text-xs font-black uppercase tracking-widest text-slate-300">FPT Tasks ({stats.fptWeight}%)</span>
+                                                </div>
+                                                <button onClick={addFptPart} className="text-[10px] bg-blue-600 px-2 py-0.5 rounded hover:bg-blue-700 transition-colors font-bold uppercase">Add Task</button>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                {activeCourse.fptParts.map(p => {
+                                                    const partPct = (parseFloat(p.score) / parseFloat(p.total)) * 100;
+                                                    return (
+                                                        <div key={p.id} className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 relative group transition-all hover:border-slate-600">
+                                                            <div className="flex justify-between items-center mb-1">
                                                                 <input
-                                                                    type="text" className="w-12 bg-slate-900 border border-slate-700 rounded text-xs p-1 outline-none focus:border-blue-500 text-center"
-                                                                    value={p.score} onChange={(e) => updateFptField(p.id, 'score', e.target.value)}
-                                                                    placeholder="0"
+                                                                    className="bg-transparent text-[10px] font-bold text-slate-400 uppercase w-full outline-none"
+                                                                    value={p.name}
+                                                                    onChange={(e) => updateFptField(p.id, 'name', e.target.value)}
                                                                 />
-                                                                <span className="text-slate-600">/</span>
-                                                                <input
-                                                                    type="text" className="w-12 bg-slate-900 border border-slate-700 rounded text-xs p-1 outline-none focus:border-blue-500 text-center"
-                                                                    value={p.total} onChange={(e) => updateFptField(p.id, 'total', e.target.value)}
-                                                                />
+                                                                {!isNaN(partPct) && isFinite(partPct) && (
+                                                                    <span className="text-[10px] font-mono text-blue-400 bg-blue-900/40 px-1.5 rounded">{partPct.toFixed(1)}%</span>
+                                                                )}
                                                             </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="text-[10px] text-right">
-                                                                    <span className="text-slate-500 block">Weight Ratio</span>
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <div className="flex items-center gap-1">
                                                                     <input
-                                                                        type="text" className="bg-transparent text-blue-400 font-mono w-8 text-right outline-none"
-                                                                        value={p.weight} onChange={(e) => updateFptField(p.id, 'weight', e.target.value)}
+                                                                        type="text" className="w-12 bg-slate-900 border border-slate-700 rounded text-xs p-1 outline-none focus:border-blue-500 text-center"
+                                                                        value={p.score} onChange={(e) => updateFptField(p.id, 'score', e.target.value)}
+                                                                        placeholder="0"
+                                                                    />
+                                                                    <span className="text-slate-600">/</span>
+                                                                    <input
+                                                                        type="text" className="w-12 bg-slate-900 border border-slate-700 rounded text-xs p-1 outline-none focus:border-blue-500 text-center"
+                                                                        value={p.total} onChange={(e) => updateFptField(p.id, 'total', e.target.value)}
                                                                     />
                                                                 </div>
-                                                                <button onClick={() => removeFptPart(p.id)} className="text-slate-600 hover:text-red-500 transition-colors ml-1"><Trash2 size={12} /></button>
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="text-[10px] text-right">
+                                                                        <span className="text-slate-500 block">Weight Ratio</span>
+                                                                        <input
+                                                                            type="text" className="bg-transparent text-blue-400 font-mono w-8 text-right outline-none"
+                                                                            value={p.weight} onChange={(e) => updateFptField(p.id, 'weight', e.target.value)}
+                                                                        />
+                                                                    </div>
+                                                                    <button onClick={() => removeFptPart(p.id)} className="text-slate-600 hover:text-red-500 transition-colors ml-1"><Trash2 size={12} /></button>
+                                                                </div>
                                                             </div>
                                                         </div>
+                                                    );
+                                                })}
+                                                {activeCourse.fptParts.length === 0 && <p className="text-xs text-slate-600 italic">No FPT parts added.</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* Exam Column */}
+                                        <div className="space-y-4 border-l border-slate-800 pl-0 md:pl-8">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                                    <span className="text-xs font-black uppercase tracking-widest text-slate-300">Final Exam ({stats.examWeight}%)</span>
+                                                </div>
+                                            </div>
+                                            <div className="bg-blue-900/10 p-5 rounded-2xl border border-blue-500/20 space-y-4">
+                                                <div>
+                                                    <label className="text-[10px] text-blue-400 font-bold uppercase block mb-2 tracking-tighter">Raw Score</label>
+                                                    <div className="flex items-center gap-3">
+                                                        <input
+                                                            type="text" className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-lg font-bold w-24 outline-none focus:border-blue-500 text-center"
+                                                            value={activeCourse.exam.score} onChange={(e) => updateExamField('score', e.target.value)}
+                                                            placeholder="0"
+                                                        />
+                                                        <span className="text-2xl text-slate-700 font-light">/</span>
+                                                        <input
+                                                            type="text" className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-lg font-bold w-24 outline-none focus:border-blue-500 text-center text-slate-400"
+                                                            value={activeCourse.exam.total} onChange={(e) => updateExamField('total', e.target.value)}
+                                                        />
                                                     </div>
-                                                );
-                                            })}
-                                            {activeCourse.fptParts.length === 0 && <p className="text-xs text-slate-600 italic">No FPT parts added.</p>}
+                                                </div>
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Weight %</label>
+                                                        <input
+                                                            type="text" className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-bold w-16 outline-none focus:border-blue-500 text-center text-blue-400"
+                                                            value={activeCourse.exam.weight} onChange={(e) => updateExamField('weight', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="flex-1 text-right">
+                                                        <p className="text-[10px] text-slate-500 uppercase font-bold">Exam %</p>
+                                                        <p className="text-xl font-black text-blue-400 tracking-tight">{stats.examAvg.toFixed(1)}%</p>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
 
-                                    {/* Exam Column */}
-                                    <div className="space-y-4 border-l border-slate-800 pl-0 md:pl-8">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                                <span className="text-xs font-black uppercase tracking-widest text-slate-300">Final Exam ({stats.examWeight}%)</span>
-                                            </div>
-                                        </div>
-                                        <div className="bg-blue-900/10 p-5 rounded-2xl border border-blue-500/20 space-y-4">
-                                            <div>
-                                                <label className="text-[10px] text-blue-400 font-bold uppercase block mb-2 tracking-tighter">Raw Score</label>
-                                                <div className="flex items-center gap-3">
-                                                    <input
-                                                        type="text" className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-lg font-bold w-24 outline-none focus:border-blue-500 text-center"
-                                                        value={activeCourse.exam.score} onChange={(e) => updateExamField('score', e.target.value)}
-                                                        placeholder="0"
-                                                    />
-                                                    <span className="text-2xl text-slate-700 font-light">/</span>
-                                                    <input
-                                                        type="text" className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-lg font-bold w-24 outline-none focus:border-blue-500 text-center text-slate-400"
-                                                        value={activeCourse.exam.total} onChange={(e) => updateExamField('total', e.target.value)}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Weight %</label>
-                                                    <input
-                                                        type="text" className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm font-bold w-16 outline-none focus:border-blue-500 text-center text-blue-400"
-                                                        value={activeCourse.exam.weight} onChange={(e) => updateExamField('weight', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="flex-1 text-right">
-                                                    <p className="text-[10px] text-slate-500 uppercase font-bold">Exam %</p>
-                                                    <p className="text-xl font-black text-blue-400 tracking-tight">{stats.examAvg.toFixed(1)}%</p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                {/* Coursework Ledger */}
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                                            <BookOpen className="text-blue-500" size={20} /> Coursework Ledger ({stats.courseworkWeight}%)
+                                        </h2>
+                                        <button
+                                            onClick={() => {
+                                                const nid = Date.now();
+                                                updateCourseField(activeCourseId, 'assessments', [...activeCourse.assessments, { id: nid, cat: 'NEW', score: '', total: 100, weight: 1, active: true }]);
+                                            }}
+                                            className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-xs font-bold transition-all shadow-md shadow-blue-100 uppercase tracking-wider"
+                                        >
+                                            Add Entry
+                                        </button>
+                                    </div>
+
+                                    <div className="overflow-x-auto max-h-[500px]">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="sticky top-0 bg-slate-50 shadow-sm z-20">
+                                                <tr className="text-slate-400 text-[10px] uppercase tracking-widest">
+                                                    <th className="px-6 py-3 font-black">SIM</th>
+                                                    <th className="px-6 py-3 font-black">CAT</th>
+                                                    <th className="px-6 py-3 font-black">Score / Total</th>
+                                                    <th className="px-6 py-3 font-black text-center">WGT</th>
+                                                    <th className="px-6 py-3 font-black text-right pr-10">DEL</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {activeCourse.assessments.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan="5" className="px-6 py-12 text-center text-slate-400">
+                                                            <p className="text-sm">No assessments yet. Click "Add Entry" to add your first assessment.</p>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                                {activeCourse.assessments.map(a => (
+                                                    <tr key={a.id} className={`transition-all ${!a.active ? 'bg-slate-50 opacity-40 grayscale' : 'hover:bg-slate-50'}`}>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <input
+                                                                type="checkbox" checked={a.active}
+                                                                onChange={() => updateAssessment(a.id, 'active', !a.active)}
+                                                                className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                                                            />
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <input
+                                                                value={a.cat} onChange={(e) => updateAssessment(a.id, 'cat', e.target.value)}
+                                                                className="bg-transparent border-none text-[10px] font-black text-slate-600 outline-none w-16"
+                                                                placeholder="Label"
+                                                            />
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-1 font-mono text-xs">
+                                                                <input
+                                                                    type="text" value={a.score} className="w-10 border border-slate-200 rounded p-1 text-center outline-none focus:border-blue-500"
+                                                                    onChange={(v) => updateAssessment(a.id, 'score', v.target.value)}
+                                                                    placeholder="0"
+                                                                />
+                                                                <span className="text-slate-300">/</span>
+                                                                <input
+                                                                    type="text" value={a.total} className="w-10 border border-slate-200 rounded p-1 text-center outline-none focus:border-blue-500"
+                                                                    onChange={(v) => updateAssessment(a.id, 'total', v.target.value)}
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <input
+                                                                type="text" value={a.weight} className="w-10 border border-slate-200 rounded p-1 text-[10px] text-center font-bold text-slate-500"
+                                                                onChange={(v) => updateAssessment(a.id, 'weight', v.target.value)}
+                                                            />
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right pr-10">
+                                                            <button onClick={() => updateCourseField(activeCourseId, 'assessments', activeCourse.assessments.filter(x => x.id !== a.id))} className="text-slate-300 hover:text-red-500"><Trash2 size={14} /></button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Coursework Ledger */}
-                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                                <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
-                                    <h2 className="text-lg font-semibold flex items-center gap-2">
-                                        <BookOpen className="text-blue-500" size={20} /> Coursework Ledger ({stats.courseworkWeight}%)
-                                    </h2>
-                                    <button
-                                        onClick={() => {
-                                            const nid = Date.now();
-                                            updateCourseField(activeCourseId, 'assessments', [...activeCourse.assessments, { id: nid, cat: 'NEW', score: '', total: 100, weight: 1, active: true }]);
-                                        }}
-                                        className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-xs font-bold transition-all shadow-md shadow-blue-100 uppercase tracking-wider"
-                                    >
-                                        Add Entry
-                                    </button>
-                                </div>
+                            {/* Sidebar Analytics */}
+                            <div className="space-y-6">
+                                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 space-y-6">
+                                    <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-4">
+                                        <BarChart3 className="text-blue-500" size={20} /> Cumulative Report
+                                    </h3>
 
-                                <div className="overflow-x-auto max-h-[500px]">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead className="sticky top-0 bg-slate-50 shadow-sm z-20">
-                                            <tr className="text-slate-400 text-[10px] uppercase tracking-widest">
-                                                <th className="px-6 py-3 font-black">SIM</th>
-                                                <th className="px-6 py-3 font-black">CAT</th>
-                                                <th className="px-6 py-3 font-black">Score / Total</th>
-                                                <th className="px-6 py-3 font-black text-center">WGT</th>
-                                                <th className="px-6 py-3 font-black text-right pr-10">DEL</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {activeCourse.assessments.length === 0 && (
-                                                <tr>
-                                                    <td colSpan="5" className="px-6 py-12 text-center text-slate-400">
-                                                        <p className="text-sm">No assessments yet. Click "Add Entry" to add your first assessment.</p>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                            {activeCourse.assessments.map(a => (
-                                                <tr key={a.id} className={`transition-all ${!a.active ? 'bg-slate-50 opacity-40 grayscale' : 'hover:bg-slate-50'}`}>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <input
-                                                            type="checkbox" checked={a.active}
-                                                            onChange={() => updateAssessment(a.id, 'active', !a.active)}
-                                                            className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <input
-                                                            value={a.cat} onChange={(e) => updateAssessment(a.id, 'cat', e.target.value)}
-                                                            className="bg-transparent border-none text-[10px] font-black text-slate-600 outline-none w-16"
-                                                            placeholder="Label"
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-1 font-mono text-xs">
-                                                            <input
-                                                                type="text" value={a.score} className="w-10 border border-slate-200 rounded p-1 text-center outline-none focus:border-blue-500"
-                                                                onChange={(v) => updateAssessment(a.id, 'score', v.target.value)}
-                                                                placeholder="0"
-                                                            />
-                                                            <span className="text-slate-300">/</span>
-                                                            <input
-                                                                type="text" value={a.total} className="w-10 border border-slate-200 rounded p-1 text-center outline-none focus:border-blue-500"
-                                                                onChange={(v) => updateAssessment(a.id, 'total', v.target.value)}
-                                                            />
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <input
-                                                            type="text" value={a.weight} className="w-10 border border-slate-200 rounded p-1 text-[10px] text-center font-bold text-slate-500"
-                                                            onChange={(v) => updateAssessment(a.id, 'weight', v.target.value)}
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right pr-10">
-                                                        <button onClick={() => updateCourseField(activeCourseId, 'assessments', activeCourse.assessments.filter(x => x.id !== a.id))} className="text-slate-300 hover:text-red-500"><Trash2 size={14} /></button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Sidebar Analytics */}
-                        <div className="space-y-6">
-                            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 space-y-6">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-4">
-                                    <BarChart3 className="text-blue-500" size={20} /> Cumulative Report
-                                </h3>
-
-                                <div className="space-y-5">
-                                    <div className="flex flex-col gap-1.5">
-                                        <div className="flex justify-between items-end">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Coursework ({stats.courseworkWeight}%)</span>
-                                            <span className="text-sm font-bold text-slate-900">{stats.courseworkAvg.toFixed(1)}%</span>
+                                    <div className="space-y-5">
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex justify-between items-end">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Coursework ({stats.courseworkWeight}%)</span>
+                                                <span className="text-sm font-bold text-slate-900">{stats.courseworkAvg.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                                <div className="h-full bg-slate-400 transition-all duration-500" style={{ width: `${stats.courseworkAvg}%` }}></div>
+                                            </div>
                                         </div>
-                                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                            <div className="h-full bg-slate-400 transition-all duration-500" style={{ width: `${stats.courseworkAvg}%` }}></div>
+
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex justify-between items-end">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">FPT Category ({stats.fptWeight}%)</span>
+                                                <span className="text-sm font-bold text-slate-900">{stats.fptAvg.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                                <div className="h-full bg-blue-400 transition-all duration-500" style={{ width: `${stats.fptAvg}%` }}></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-1.5 pb-4">
+                                            <div className="flex justify-between items-end">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Final Exam ({stats.examWeight}%)</span>
+                                                <span className="text-sm font-bold text-slate-900">{stats.examAvg.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                                <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${stats.examAvg}%` }}></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-8 bg-slate-900 rounded-2xl shadow-2xl text-white flex flex-col items-center justify-center text-center">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-2 border-b border-slate-700 pb-1 w-full opacity-70">Projected Grade</span>
+                                            <span className="text-5xl font-black tabular-nums">{stats.finalGrade.toFixed(1)}<span className="text-xl opacity-40">%</span></span>
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-col gap-1.5">
-                                        <div className="flex justify-between items-end">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">FPT Category ({stats.fptWeight}%)</span>
-                                            <span className="text-sm font-bold text-slate-900">{stats.fptAvg.toFixed(1)}%</span>
+                                    <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Percent size={14} className="text-amber-600" />
+                                            <p className="text-[10px] font-black text-amber-800 uppercase tracking-tight">Strategy Gap Analysis</p>
                                         </div>
-                                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                            <div className="h-full bg-blue-400 transition-all duration-500" style={{ width: `${stats.fptAvg}%` }}></div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-col gap-1.5 pb-4">
-                                        <div className="flex justify-between items-end">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Final Exam ({stats.examWeight}%)</span>
-                                            <span className="text-sm font-bold text-slate-900">{stats.examAvg.toFixed(1)}%</span>
-                                        </div>
-                                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                            <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${stats.examAvg}%` }}></div>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-8 bg-slate-900 rounded-2xl shadow-2xl text-white flex flex-col items-center justify-center text-center">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-2 border-b border-slate-700 pb-1 w-full opacity-70">Projected Grade</span>
-                                        <span className="text-5xl font-black tabular-nums">{stats.finalGrade.toFixed(1)}<span className="text-xl opacity-40">%</span></span>
+                                        <p className="text-sm text-amber-700 leading-snug">
+                                            To reach your <span className="font-black text-amber-900 underline underline-offset-2">{activeCourse.target}%</span> goal, your combined average for the final evaluations (FPT + Exam) must be <span className="font-black text-amber-900">{stats.requiredEvalAvg.toFixed(1)}%</span>.
+                                        </p>
                                     </div>
                                 </div>
 
-                                <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Percent size={14} className="text-amber-600" />
-                                        <p className="text-[10px] font-black text-amber-800 uppercase tracking-tight">Strategy Gap Analysis</p>
+                                <div className="bg-slate-100 rounded-3xl p-6 space-y-4">
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-2 tracking-widest">Target Threshold</label>
+                                        <div className="flex items-center gap-4 bg-white p-2 rounded-xl shadow-inner">
+                                            <input
+                                                type="range" min="60" max="100"
+                                                value={activeCourse.target}
+                                                onChange={(e) => updateCourseField(activeCourseId, 'target', parseInt(e.target.value))}
+                                                className="flex-1 accent-slate-900 h-1"
+                                            />
+                                            <span className="text-sm font-black w-10 text-slate-700">{activeCourse.target}%</span>
+                                        </div>
                                     </div>
-                                    <p className="text-sm text-amber-700 leading-snug">
-                                        To reach your <span className="font-black text-amber-900 underline underline-offset-2">{activeCourse.target}%</span> goal, your combined average for the final evaluations (FPT + Exam) must be <span className="font-black text-amber-900">{stats.requiredEvalAvg.toFixed(1)}%</span>.
+
+                                </div>
+
+                                <div className="text-center">
+                                    <p className="text-[10px] text-slate-400 flex items-center justify-center gap-1 uppercase tracking-widest font-bold opacity-60">
+                                        <Undo2 size={10} /> Tip: Toggle "Sim" checks to simulate drops in marks
                                     </p>
                                 </div>
                             </div>
+                        </div>
 
-                            <div className="bg-slate-100 rounded-3xl p-6 space-y-4">
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-2 tracking-widest">Target Threshold</label>
-                                    <div className="flex items-center gap-4 bg-white p-2 rounded-xl shadow-inner">
-                                        <input
-                                            type="range" min="60" max="100"
-                                            value={activeCourse.target}
-                                            onChange={(e) => updateCourseField(activeCourseId, 'target', parseInt(e.target.value))}
-                                            className="flex-1 accent-slate-900 h-1"
-                                        />
-                                        <span className="text-sm font-black w-10 text-slate-700">{activeCourse.target}%</span>
+                        {/* Full-Width Grade Progress Graph */}
+                        {(activeCourse.assessments.filter(a => a.active && a.score && a.total).length > 0) && (
+                            <div className="mt-8 bg-white rounded-3xl shadow-lg border border-slate-200 p-8">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                                            <TrendingUp className="text-green-600" size={22} />
+                                        </div>
+                                        Grade Progress
+                                    </h3>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Assessments</p>
+                                        <p className="text-2xl font-black text-slate-800">{activeCourse.assessments.filter(a => a.active && a.score && a.total).length}</p>
                                     </div>
                                 </div>
-
+                                <div className="h-80">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart
+                                            data={activeCourse.assessments
+                                                .filter(a => a.active && a.score && a.total)
+                                                .map((a, idx) => ({
+                                                    name: a.cat || `#${idx + 1}`,
+                                                    grade: parseFloat(((parseFloat(a.score) / parseFloat(a.total)) * 100).toFixed(1)),
+                                                    index: idx + 1
+                                                }))}
+                                            margin={{ top: 20, right: 30, left: 10, bottom: 40 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                            <XAxis
+                                                dataKey="index"
+                                                tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
+                                                axisLine={{ stroke: '#cbd5e1' }}
+                                                tickLine={{ stroke: '#cbd5e1' }}
+                                                label={{ value: 'Assessment #', position: 'bottom', offset: 0, style: { fontSize: 11, fill: '#94a3b8' } }}
+                                            />
+                                            <YAxis
+                                                domain={[0, 100]}
+                                                tick={{ fontSize: 12, fill: '#64748b' }}
+                                                axisLine={{ stroke: '#cbd5e1' }}
+                                                tickLine={{ stroke: '#cbd5e1' }}
+                                                tickFormatter={(value) => `${value}%`}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: '#1e293b',
+                                                    border: 'none',
+                                                    borderRadius: '12px',
+                                                    fontSize: '14px',
+                                                    color: '#fff',
+                                                    padding: '12px 16px',
+                                                    boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
+                                                }}
+                                                formatter={(value, dataKey, props) => [`${value}%`, `${props.payload.name} (Grade)`]}
+                                                labelFormatter={(label) => `Assessment #${label}`}
+                                            />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="grade"
+                                                stroke="#3b82f6"
+                                                strokeWidth={3}
+                                                dot={{ fill: '#3b82f6', strokeWidth: 3, r: 6, stroke: '#fff' }}
+                                                activeDot={{ r: 8, fill: '#1d4ed8', stroke: '#fff', strokeWidth: 3 }}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+                                    <p className="text-sm text-slate-500">
+                                        Each point represents an individual assessment grade
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                        <span className="text-xs font-medium text-slate-600">Assessment Score</span>
+                                    </div>
+                                </div>
                             </div>
-
-                            <div className="text-center">
-                                <p className="text-[10px] text-slate-400 flex items-center justify-center gap-1 uppercase tracking-widest font-bold opacity-60">
-                                    <Undo2 size={10} /> Tip: Toggle "Sim" checks to simulate drops in marks
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+                        )}
+                    </>
                 )}
             </div>
 
