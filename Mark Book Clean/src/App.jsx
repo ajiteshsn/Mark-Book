@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import Tesseract from 'tesseract.js';
 import {
     Calculator,
     Plus,
@@ -22,7 +23,10 @@ import {
     Cloud,
     CloudOff,
     RefreshCw,
-    TrendingUp
+    TrendingUp,
+    Image as ImageIcon,
+    FileText,
+    AlertCircle
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -79,6 +83,16 @@ const App = () => {
     const [saveStatus, setSaveStatus] = useState('');
     const [showImportModal, setShowImportModal] = useState(false);
     const [importText, setImportText] = useState('');
+
+    // OCR State
+    const [showOcrModal, setShowOcrModal] = useState(false);
+    const [ocrImage, setOcrImage] = useState(null);
+    const [ocrImagePreview, setOcrImagePreview] = useState(null);
+    const [ocrProcessing, setOcrProcessing] = useState(false);
+    const [ocrProgress, setOcrProgress] = useState(0);
+    const [ocrResults, setOcrResults] = useState([]);
+    const [ocrError, setOcrError] = useState('');
+    const ocrFileInputRef = useRef(null);
 
     // Auth form state
     const [authUsername, setAuthUsername] = useState('');
@@ -287,6 +301,256 @@ const App = () => {
 
         setShowImportModal(false);
         setImportText('');
+    };
+
+    // OCR Functions
+    const handleOcrFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            setOcrError('Please select an image file (JPG, PNG, etc.)');
+            return;
+        }
+
+        setOcrImage(file);
+        setOcrError('');
+        setOcrResults([]);
+
+        // Create preview
+        const reader = new FileReader();
+        reader.onload = (e) => setOcrImagePreview(e.target.result);
+        reader.readAsDataURL(file);
+    };
+
+    const parseOcrText = (text) => {
+        const results = [];
+        const lines = text.split('\n').filter(line => line.trim());
+
+        // Helper to extract score/total from various formats
+        const extractScoreTotal = (str) => {
+            // Match patterns like "14.5/17", "26.3/30", "8.5/10"
+            const match = str.match(/(\d+(?:\.\d+)?)\s*[\/\\]\s*(\d+(?:\.\d+)?)/);
+            if (match) {
+                return { score: match[1], total: match[2] };
+            }
+            return null;
+        };
+
+        // Helper to clean category name
+        const cleanCategory = (cat) => {
+            return cat
+                .replace(/^\d+\.\s*/, '') // Remove leading number like "2. "
+                .replace(/^[·•]\s*/, '') // Remove bullet points
+                .trim()
+                .substring(0, 25);
+        };
+
+        // Process each line
+        lines.forEach((line, idx) => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || trimmedLine.length < 3) return;
+
+            // Skip header lines
+            const skipPatterns = [
+                /^entry\s*titles?/i,
+                /^actual\s*mark/i,
+                /^mark\s*%/i,
+                /^date/i,
+                /^unit$/i,
+                /^total$/i,
+                /^score$/i,
+                /^category$/i,
+                /^weight$/i
+            ];
+            if (skipPatterns.some(p => p.test(trimmedLine))) return;
+
+            // Try multiple extraction strategies
+
+            // Strategy 1: Look for "score/total" pattern anywhere in the line
+            const scoreData = extractScoreTotal(trimmedLine);
+            if (scoreData) {
+                // Find the category (text before the score)
+                const scorePos = trimmedLine.search(/\d+(?:\.\d+)?\s*[\/\\]\s*\d+/);
+                let category = trimmedLine.substring(0, scorePos).trim();
+
+                // Clean up category
+                category = cleanCategory(category);
+
+                // If no category found, try to use line number
+                if (!category || category.length < 2) {
+                    category = `Item ${results.length + 1}`;
+                }
+
+                // Validate
+                const scoreNum = parseFloat(scoreData.score);
+                const totalNum = parseFloat(scoreData.total);
+                if (isNaN(scoreNum) || isNaN(totalNum) || totalNum <= 0) return;
+                if (scoreNum < 0 || scoreNum > totalNum * 1.5) return; // Allow small buffer for bonus marks
+
+                // Calculate confidence
+                let confidence = 80;
+                if (category.length > 3) confidence += 5;
+                if (category.match(/quiz|test|assignment|exam|lab|project/i)) confidence += 10;
+                if (scoreNum <= totalNum) confidence += 5;
+                confidence = Math.min(confidence, 100);
+
+                results.push({
+                    id: Date.now() + Math.random(),
+                    cat: category.toUpperCase(),
+                    score: scoreData.score,
+                    total: scoreData.total,
+                    weight: '1',
+                    confidence: confidence,
+                    originalLine: trimmedLine
+                });
+                return;
+            }
+
+            // Strategy 2: Percentage pattern (85% or 85 %)
+            const pctMatch = trimmedLine.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*%\s*$/);
+            if (pctMatch) {
+                let category = cleanCategory(pctMatch[1]);
+                const score = pctMatch[2];
+
+                if (category.length >= 2) {
+                    const scoreNum = parseFloat(score);
+                    if (!isNaN(scoreNum) && scoreNum >= 0 && scoreNum <= 100) {
+                        results.push({
+                            id: Date.now() + Math.random(),
+                            cat: category.toUpperCase(),
+                            score: score,
+                            total: '100',
+                            weight: '1',
+                            confidence: 85,
+                            originalLine: trimmedLine
+                        });
+                    }
+                }
+                return;
+            }
+
+            // Strategy 3: Tab or space-separated columns (Category, Score, Total)
+            const columns = trimmedLine.split(/\t+|\s{2,}/);
+            if (columns.length >= 3) {
+                // Try to find which columns have numbers
+                for (let i = 0; i < columns.length - 1; i++) {
+                    const scoreMatch = columns[i].match(/^(\d+(?:\.\d+)?)$/);
+                    const totalMatch = columns[i + 1].match(/^(\d+(?:\.\d+)?)$/);
+                    if (scoreMatch && totalMatch) {
+                        // Found score and total, category is everything before
+                        const categoryParts = columns.slice(0, i);
+                        let category = cleanCategory(categoryParts.join(' '));
+                        if (category.length < 2) category = `Item ${results.length + 1}`;
+
+                        const scoreNum = parseFloat(scoreMatch[1]);
+                        const totalNum = parseFloat(totalMatch[1]);
+                        if (!isNaN(scoreNum) && !isNaN(totalNum) && totalNum > 0 && scoreNum <= totalNum * 1.5) {
+                            results.push({
+                                id: Date.now() + Math.random(),
+                                cat: category.toUpperCase(),
+                                score: scoreMatch[1],
+                                total: totalMatch[1],
+                                weight: '1',
+                                confidence: 75,
+                                originalLine: trimmedLine
+                            });
+                        }
+                        return;
+                    }
+                }
+            }
+        });
+
+        return results;
+    };
+
+    const handleOcrProcess = async () => {
+        if (!ocrImage) {
+            setOcrError('Please select an image first');
+            return;
+        }
+
+        setOcrProcessing(true);
+        setOcrProgress(0);
+        setOcrError('');
+        setOcrResults([]);
+
+        try {
+            const result = await Tesseract.recognize(
+                ocrImage,
+                'eng',
+                {
+                    logger: (m) => {
+                        if (m.status === 'recognizing text') {
+                            setOcrProgress(Math.round(m.progress * 100));
+                        }
+                    }
+                }
+            );
+
+            const extractedText = result.data.text;
+            const parsedResults = parseOcrText(extractedText);
+
+            if (parsedResults.length === 0) {
+                setOcrError('No marks detected. Try a clearer image with format like "Quiz: 85/100"');
+            } else {
+                setOcrResults(parsedResults);
+            }
+        } catch (error) {
+            console.error('OCR Error:', error);
+            setOcrError('Failed to process image. Please try again.');
+        } finally {
+            setOcrProcessing(false);
+            setOcrProgress(0);
+        }
+    };
+
+    const updateOcrResult = (id, field, value) => {
+        setOcrResults(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+    };
+
+    const removeOcrResult = (id) => {
+        setOcrResults(prev => prev.filter(r => r.id !== id));
+    };
+
+    const handleOcrImport = () => {
+        if (!activeCourse || ocrResults.length === 0) return;
+
+        const newAssessments = ocrResults.map(r => ({
+            id: Date.now() + Math.random(),
+            cat: r.cat,
+            score: r.score,
+            total: r.total,
+            weight: r.weight,
+            active: true
+        }));
+
+        updateCourseField(activeCourseId, 'assessments', [
+            ...activeCourse.assessments,
+            ...newAssessments
+        ]);
+
+        setSaveStatus(`Imported ${newAssessments.length} marks from image!`);
+        setTimeout(() => setSaveStatus(''), 3000);
+
+        // Reset OCR state
+        setShowOcrModal(false);
+        setOcrImage(null);
+        setOcrImagePreview(null);
+        setOcrResults([]);
+        setOcrError('');
+        if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
+    };
+
+    const closeOcrModal = () => {
+        setShowOcrModal(false);
+        setOcrImage(null);
+        setOcrImagePreview(null);
+        setOcrResults([]);
+        setOcrError('');
+        setOcrProcessing(false);
+        if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
     };
 
     const stats = useMemo(() => {
@@ -736,6 +1000,14 @@ const App = () => {
                             >
                                 <Upload size={16} />
                             </button>
+                            <button
+                                onClick={() => setShowOcrModal(true)}
+                                className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all text-sm font-medium"
+                                title="Scan markbook image"
+                            >
+                                <ImageIcon size={16} />
+                                <span className="hidden sm:inline">Scan</span>
+                            </button>
                             {(saveStatus || syncStatus) && (
                                 <span className="text-green-600 text-sm font-bold animate-pulse">{saveStatus || syncStatus}</span>
                             )}
@@ -1184,6 +1456,193 @@ const App = () => {
                             >
                                 Import
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* OCR Modal */}
+            {showOcrModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <ImageIcon className="text-purple-600" size={22} />
+                                Scan Markbook Image
+                            </h3>
+                            <button
+                                onClick={closeOcrModal}
+                                className="text-slate-400 hover:text-slate-600"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <p className="text-sm text-slate-500 mb-4">
+                            Upload an image of your markbook. Supported formats: <code className="bg-slate-100 px-1 rounded">Quiz: 85/100</code>, <code className="bg-slate-100 px-1 rounded">Test - 92%</code>
+                        </p>
+
+                        {/* File Input */}
+                        <div className="mb-4">
+                            <input
+                                ref={ocrFileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleOcrFileSelect}
+                                className="block w-full text-sm text-slate-500
+                                    file:mr-4 file:py-2 file:px-4
+                                    file:rounded-lg file:border-0
+                                    file:text-sm file:font-semibold
+                                    file:bg-purple-100 file:text-purple-700
+                                    hover:file:bg-purple-200
+                                    cursor-pointer"
+                            />
+                        </div>
+
+                        {/* Image Preview */}
+                        {ocrImagePreview && (
+                            <div className="mb-4 border border-slate-200 rounded-xl p-2 bg-slate-50">
+                                <img
+                                    src={ocrImagePreview}
+                                    alt="Preview"
+                                    className="max-h-48 mx-auto rounded-lg object-contain"
+                                />
+                            </div>
+                        )}
+
+                        {/* Process Button */}
+                        {ocrImage && !ocrProcessing && ocrResults.length === 0 && (
+                            <button
+                                onClick={handleOcrProcess}
+                                className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 mb-4"
+                            >
+                                <FileText size={18} />
+                                Extract Marks
+                            </button>
+                        )}
+
+                        {/* Processing State */}
+                        {ocrProcessing && (
+                            <div className="mb-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="animate-spin w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full"></div>
+                                    <span className="text-sm font-medium text-slate-600">Processing image... {ocrProgress}%</span>
+                                </div>
+                                <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-purple-600 transition-all duration-300"
+                                        style={{ width: `${ocrProgress}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Error Message */}
+                        {ocrError && (
+                            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-700 text-sm">
+                                <AlertCircle size={18} />
+                                {ocrError}
+                            </div>
+                        )}
+
+                        {/* Results Table */}
+                        {ocrResults.length > 0 && (
+                            <div className="mb-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="text-sm font-bold text-slate-600">Detected Marks ({ocrResults.length})</h4>
+                                    <span className="text-xs text-slate-400">Review and edit before importing</span>
+                                </div>
+                                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50">
+                                            <tr className="text-slate-500 text-xs uppercase">
+                                                <th className="px-3 py-2 text-left">Category</th>
+                                                <th className="px-3 py-2 text-left">Score</th>
+                                                <th className="px-3 py-2 text-left">Total</th>
+                                                <th className="px-3 py-2 text-left">Weight</th>
+                                                <th className="px-3 py-2 text-center">Conf.</th>
+                                                <th className="px-3 py-2"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {ocrResults.map(r => (
+                                                <tr key={r.id} className={r.confidence < 90 ? 'bg-amber-50' : ''}>
+                                                    <td className="px-3 py-2">
+                                                        <input
+                                                            type="text"
+                                                            value={r.cat}
+                                                            onChange={(e) => updateOcrResult(r.id, 'cat', e.target.value)}
+                                                            className="w-full bg-transparent border-b border-slate-200 focus:border-purple-500 outline-none px-1 py-0.5 text-xs font-bold"
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        <input
+                                                            type="text"
+                                                            value={r.score}
+                                                            onChange={(e) => updateOcrResult(r.id, 'score', e.target.value)}
+                                                            className="w-16 bg-transparent border-b border-slate-200 focus:border-purple-500 outline-none px-1 py-0.5 text-center"
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        <input
+                                                            type="text"
+                                                            value={r.total}
+                                                            onChange={(e) => updateOcrResult(r.id, 'total', e.target.value)}
+                                                            className="w-16 bg-transparent border-b border-slate-200 focus:border-purple-500 outline-none px-1 py-0.5 text-center"
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        <input
+                                                            type="text"
+                                                            value={r.weight}
+                                                            onChange={(e) => updateOcrResult(r.id, 'weight', e.target.value)}
+                                                            className="w-12 bg-transparent border-b border-slate-200 focus:border-purple-500 outline-none px-1 py-0.5 text-center"
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center">
+                                                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${r.confidence >= 95 ? 'bg-green-100 text-green-700' : r.confidence >= 90 ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                            {r.confidence}%
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center">
+                                                        <button
+                                                            onClick={() => removeOcrResult(r.id)}
+                                                            className="text-slate-300 hover:text-red-500"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {ocrResults.some(r => r.confidence < 90) && (
+                                    <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                                        <AlertCircle size={12} />
+                                        Highlighted rows have lower confidence. Please verify.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3">
+                            <button
+                                onClick={closeOcrModal}
+                                className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 font-medium hover:bg-slate-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            {ocrResults.length > 0 && (
+                                <button
+                                    onClick={handleOcrImport}
+                                    className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Check size={18} />
+                                    Import {ocrResults.length} Marks
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
