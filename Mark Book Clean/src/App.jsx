@@ -329,21 +329,38 @@ const App = () => {
 
         // Helper to extract score/total from various formats
         const extractScoreTotal = (str) => {
-            // Match patterns like "14.5/17", "26.3/30", "8.5/10"
-            const match = str.match(/(\d+(?:\.\d+)?)\s*[\/\\]\s*(\d+(?:\.\d+)?)/);
+            // Match patterns like "14.5/17", "26.3/30", "8.5/10", "15/18"
+            // Also handle OCR errors like "14,5/17" or "14.5\17"
+            const match = str.match(/(\d+(?:[.,]\d+)?)\s*[\/\\|]\s*(\d+(?:[.,]\d+)?)/);
             if (match) {
-                return { score: match[1], total: match[2] };
+                return {
+                    score: match[1].replace(',', '.'),
+                    total: match[2].replace(',', '.')
+                };
             }
             return null;
         };
 
-        // Helper to clean category name
-        const cleanCategory = (cat) => {
-            return cat
-                .replace(/^\d+\.\s*/, '') // Remove leading number like "2. "
-                .replace(/^[·•]\s*/, '') // Remove bullet points
+        // Helper to clean and extract the entry name
+        const cleanEntryName = (name) => {
+            return name
+                .replace(/^\d+\.\s*/, '')        // Remove leading "1. ", "2. ", etc.
+                .replace(/^[·•*]\s*/, '')        // Remove bullet points
+                .replace(/^\*/, '')               // Remove leading asterisks
+                .replace(/\s+/g, ' ')             // Normalize whitespace
                 .trim()
-                .substring(0, 25);
+                .substring(0, 30);                // Limit length
+        };
+
+        // Helper to detect if a string looks like a date
+        const isDate = (str) => {
+            return /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[.\s]?\s*\d{1,2}/i.test(str) ||
+                /^\d{1,2}[\/\-]\d{1,2}/i.test(str);
+        };
+
+        // Helper to detect category codes (Know, Appl, Think, Comm, K, A, T, C)
+        const isCategoryCode = (str) => {
+            return /^(know|appl|think|comm|k|a|t|c)$/i.test(str.trim());
         };
 
         // Process each line
@@ -351,74 +368,108 @@ const App = () => {
             const trimmedLine = line.trim();
             if (!trimmedLine || trimmedLine.length < 3) return;
 
-            // Skip header lines
+            // Skip obvious header lines
             const skipPatterns = [
-                /^entry\s*titles?/i,
-                /^actual\s*mark/i,
-                /^mark\s*%/i,
-                /^date/i,
+                /^entry\s*titles?$/i,
+                /^actual\s*marks?$/i,
+                /^mark\s*%$/i,
+                /^date$/i,
                 /^unit$/i,
                 /^total$/i,
                 /^score$/i,
                 /^category$/i,
-                /^weight$/i
+                /^weight$/i,
+                /^date\s+unit\s+category/i,
+                /^entry\s+titles.*date.*unit.*category.*mark/i
             ];
             if (skipPatterns.some(p => p.test(trimmedLine))) return;
 
-            // Try multiple extraction strategies
-
-            // Strategy 1: Look for "score/total" pattern anywhere in the line
+            // STRATEGY 1: Your markbook format - look for score/total at the end
+            // Format: "1. Unit 1 Quiz 1 K    Sep. 18    1    Know    15/18"
             const scoreData = extractScoreTotal(trimmedLine);
             if (scoreData) {
-                // Find the category (text before the score)
-                const scorePos = trimmedLine.search(/\d+(?:\.\d+)?\s*[\/\\]\s*\d+/);
-                let category = trimmedLine.substring(0, scorePos).trim();
+                // Find where the score starts
+                const scoreMatch = trimmedLine.match(/(\d+(?:[.,]\d+)?)\s*[\/\\|]\s*(\d+(?:[.,]\d+)?)/);
+                if (scoreMatch) {
+                    const scorePos = trimmedLine.indexOf(scoreMatch[0]);
+                    let beforeScore = trimmedLine.substring(0, scorePos).trim();
 
-                // Clean up category
-                category = cleanCategory(category);
+                    // Try to split into columns (spaces, tabs, or multiple spaces)
+                    let columns = beforeScore.split(/\t+|\s{2,}/).filter(c => c.trim());
 
-                // If no category found, try to use line number
-                if (!category || category.length < 2) {
-                    category = `Item ${results.length + 1}`;
+                    // Find the entry name - usually the first substantial text
+                    let entryName = '';
+                    let foundName = false;
+
+                    for (let i = 0; i < columns.length; i++) {
+                        const col = columns[i].trim();
+
+                        // Skip dates, single numbers (unit numbers), and category codes
+                        if (isDate(col)) continue;
+                        if (/^\d+$/.test(col) && parseInt(col) <= 10) continue; // Unit numbers
+                        if (isCategoryCode(col)) continue;
+
+                        // This is likely the entry name
+                        if (!foundName && col.length > 2) {
+                            entryName = col;
+                            foundName = true;
+                        }
+                    }
+
+                    // If no name found from columns, take everything before first date/number pattern
+                    if (!entryName) {
+                        const nameMatch = beforeScore.match(/^(.+?)(?:\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|[0-9]{1,2}[\/\-]))/i);
+                        if (nameMatch) {
+                            entryName = nameMatch[1];
+                        } else {
+                            entryName = beforeScore;
+                        }
+                    }
+
+                    entryName = cleanEntryName(entryName);
+
+                    // If still no good name, generate one
+                    if (!entryName || entryName.length < 2) {
+                        entryName = `Item ${results.length + 1}`;
+                    }
+
+                    // Validate the numbers
+                    const scoreNum = parseFloat(scoreData.score);
+                    const totalNum = parseFloat(scoreData.total);
+                    if (isNaN(scoreNum) || isNaN(totalNum) || totalNum <= 0) return;
+                    if (scoreNum < 0 || scoreNum > totalNum * 1.5) return; // Allow buffer for bonus
+
+                    // Calculate confidence
+                    let confidence = 85;
+                    if (entryName.match(/quiz|test|assignment|exam|lab|project|unit/i)) confidence += 10;
+                    if (scoreNum <= totalNum) confidence += 5;
+                    confidence = Math.min(confidence, 100);
+
+                    results.push({
+                        id: Date.now() + Math.random(),
+                        cat: entryName.toUpperCase(),
+                        score: scoreData.score,
+                        total: scoreData.total,
+                        weight: '1',
+                        confidence: confidence,
+                        originalLine: trimmedLine
+                    });
+                    return;
                 }
-
-                // Validate
-                const scoreNum = parseFloat(scoreData.score);
-                const totalNum = parseFloat(scoreData.total);
-                if (isNaN(scoreNum) || isNaN(totalNum) || totalNum <= 0) return;
-                if (scoreNum < 0 || scoreNum > totalNum * 1.5) return; // Allow small buffer for bonus marks
-
-                // Calculate confidence
-                let confidence = 80;
-                if (category.length > 3) confidence += 5;
-                if (category.match(/quiz|test|assignment|exam|lab|project/i)) confidence += 10;
-                if (scoreNum <= totalNum) confidence += 5;
-                confidence = Math.min(confidence, 100);
-
-                results.push({
-                    id: Date.now() + Math.random(),
-                    cat: category.toUpperCase(),
-                    score: scoreData.score,
-                    total: scoreData.total,
-                    weight: '1',
-                    confidence: confidence,
-                    originalLine: trimmedLine
-                });
-                return;
             }
 
-            // Strategy 2: Percentage pattern (85% or 85 %)
+            // STRATEGY 2: Percentage pattern (85% or 85 %)
             const pctMatch = trimmedLine.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*%\s*$/);
             if (pctMatch) {
-                let category = cleanCategory(pctMatch[1]);
+                let entryName = cleanEntryName(pctMatch[1]);
                 const score = pctMatch[2];
 
-                if (category.length >= 2) {
+                if (entryName.length >= 2) {
                     const scoreNum = parseFloat(score);
                     if (!isNaN(scoreNum) && scoreNum >= 0 && scoreNum <= 100) {
                         results.push({
                             id: Date.now() + Math.random(),
-                            cat: category.toUpperCase(),
+                            cat: entryName.toUpperCase(),
                             score: score,
                             total: '100',
                             weight: '1',
@@ -430,33 +481,63 @@ const App = () => {
                 return;
             }
 
-            // Strategy 3: Tab or space-separated columns (Category, Score, Total)
-            const columns = trimmedLine.split(/\t+|\s{2,}/);
-            if (columns.length >= 3) {
-                // Try to find which columns have numbers
-                for (let i = 0; i < columns.length - 1; i++) {
-                    const scoreMatch = columns[i].match(/^(\d+(?:\.\d+)?)$/);
-                    const totalMatch = columns[i + 1].match(/^(\d+(?:\.\d+)?)$/);
-                    if (scoreMatch && totalMatch) {
-                        // Found score and total, category is everything before
-                        const categoryParts = columns.slice(0, i);
-                        let category = cleanCategory(categoryParts.join(' '));
-                        if (category.length < 2) category = `Item ${results.length + 1}`;
+            // STRATEGY 3: Simple "name score/total" format
+            const simpleMatch = trimmedLine.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*$/);
+            if (simpleMatch) {
+                let entryName = cleanEntryName(simpleMatch[1]);
+                const score = simpleMatch[2];
+                const total = simpleMatch[3];
 
-                        const scoreNum = parseFloat(scoreMatch[1]);
-                        const totalNum = parseFloat(totalMatch[1]);
+                if (entryName.length >= 2) {
+                    const scoreNum = parseFloat(score);
+                    const totalNum = parseFloat(total);
+                    if (!isNaN(scoreNum) && !isNaN(totalNum) && totalNum > 0 && scoreNum <= totalNum * 1.5) {
+                        results.push({
+                            id: Date.now() + Math.random(),
+                            cat: entryName.toUpperCase(),
+                            score: score,
+                            total: total,
+                            weight: '1',
+                            confidence: 80,
+                            originalLine: trimmedLine
+                        });
+                    }
+                }
+                return;
+            }
+
+            // STRATEGY 4: Tab or multi-space separated columns
+            const columns = trimmedLine.split(/\t+|\s{3,}/);
+            if (columns.length >= 2) {
+                // Look for score/total in any column
+                for (let i = columns.length - 1; i >= 0; i--) {
+                    const colScoreData = extractScoreTotal(columns[i]);
+                    if (colScoreData) {
+                        // Everything before this column is the name
+                        let nameParts = columns.slice(0, i).filter(c => {
+                            const t = c.trim();
+                            return t && !isDate(t) && !isCategoryCode(t) && !/^\d+$/.test(t);
+                        });
+
+                        let entryName = cleanEntryName(nameParts.join(' '));
+                        if (!entryName || entryName.length < 2) {
+                            entryName = `Item ${results.length + 1}`;
+                        }
+
+                        const scoreNum = parseFloat(colScoreData.score);
+                        const totalNum = parseFloat(colScoreData.total);
                         if (!isNaN(scoreNum) && !isNaN(totalNum) && totalNum > 0 && scoreNum <= totalNum * 1.5) {
                             results.push({
                                 id: Date.now() + Math.random(),
-                                cat: category.toUpperCase(),
-                                score: scoreMatch[1],
-                                total: totalMatch[1],
+                                cat: entryName.toUpperCase(),
+                                score: colScoreData.score,
+                                total: colScoreData.total,
                                 weight: '1',
                                 confidence: 75,
                                 originalLine: trimmedLine
                             });
                         }
-                        return;
+                        break;
                     }
                 }
             }
