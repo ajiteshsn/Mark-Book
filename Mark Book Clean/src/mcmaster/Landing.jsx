@@ -11,6 +11,7 @@ import {
     Sparkles,
     CheckCircle2,
     UserX,
+    Cloud,
 } from 'lucide-react';
 import Logo from './Logo.jsx';
 
@@ -106,17 +107,28 @@ const HeroPreview = () => (
     </div>
 );
 
-const Landing = ({ onOpen, onImportOutline, summary }) => (
+const Landing = ({ onOpen, onImportOutline, summary, cloud, onAccount }) => (
     <div className="min-h-screen bg-white text-slate-900 font-sans">
         {/* Nav */}
         <nav className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between">
             <Logo size={40} />
-            <button
-                onClick={() => onOpen()}
-                className="bg-mac-maroon text-white font-bold text-sm px-4 py-2.5 rounded-xl hover:bg-mac-maroon-dark transition-all flex items-center gap-1"
-            >
-                Open App <ChevronRight size={16} />
-            </button>
+            <div className="flex items-center gap-2">
+                {cloud.enabled && (
+                    <button
+                        onClick={onAccount}
+                        className="hidden sm:flex items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-mac-maroon px-3 py-2.5 rounded-xl transition-colors"
+                    >
+                        <Cloud size={16} className={cloud.user ? 'text-emerald-600' : ''} />
+                        {cloud.user ? 'Synced' : 'Sign in'}
+                    </button>
+                )}
+                <button
+                    onClick={() => onOpen()}
+                    className="bg-mac-maroon text-white font-bold text-sm px-4 py-2.5 rounded-xl hover:bg-mac-maroon-dark transition-all flex items-center gap-1"
+                >
+                    Open App <ChevronRight size={16} />
+                </button>
+            </div>
         </nav>
 
         {/* Hero */}
@@ -150,7 +162,11 @@ const Landing = ({ onOpen, onImportOutline, summary }) => (
                     <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
                         <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-emerald-600" /> Free</span>
                         <span className="flex items-center gap-1.5"><UserX size={16} className="text-emerald-600" /> No account needed</span>
-                        <span className="flex items-center gap-1.5"><Lock size={16} className="text-emerald-600" /> Grades stay on your device</span>
+                        {cloud.enabled ? (
+                            <button onClick={onAccount} className="flex items-center gap-1.5 hover:text-mac-maroon"><Cloud size={16} className="text-emerald-600" /> Optional sync between phone &amp; computer</button>
+                        ) : (
+                            <span className="flex items-center gap-1.5"><Lock size={16} className="text-emerald-600" /> Grades stay on your device</span>
+                        )}
                     </div>
 
                     {summary.courses > 0 && (

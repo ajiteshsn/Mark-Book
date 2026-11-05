@@ -11,8 +11,29 @@ A grade and GPA calculator for McMaster University students. Track your course m
 - **Terms and CGPA** - term GPA, Fall/Winter sessional average, unit-weighted CGPA, units earned, GPA-by-term chart and a CGPA planner
 - **Requirements** - academic standing, B.Tech/B.Eng Level II entry, co-op eligibility, Dean's Honour List and editable renewable-scholarship rules. Each shows its source and confidence. Always confirm with the Undergraduate Calendar.
 - **Mark entry shortcuts** - paste marks as text, scan a screenshot (OCR), and JSON backup/restore
+- **Optional sync between devices** - sign in with an emailed link (no password) to keep your phone and computer in sync
 
-Everything runs in the browser: grades and uploaded outlines never leave your device. This is an unofficial tool and isn't affiliated with McMaster University.
+Grades are saved in your browser. If you sign in, they're also saved to your own account (Supabase, protected by row-level security so only you can read them). Course outlines are always read in the browser and never uploaded. This is an unofficial tool and isn't affiliated with McMaster University.
+
+### Sync setup (for maintainers)
+
+Sync uses Supabase, configured in `.env` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`). The publishable key is safe to ship in the browser; never put the secret / service_role key there. The database needs one table:
+
+```sql
+create table public.user_data (
+  user_id    uuid primary key references auth.users on delete cascade,
+  terms      jsonb not null default '[]',
+  profile    jsonb not null default '{}',
+  settings   jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+alter table public.user_data enable row level security;
+create policy "Users read own data"   on public.user_data for select using (auth.uid() = user_id);
+create policy "Users insert own data" on public.user_data for insert with check (auth.uid() = user_id);
+create policy "Users update own data" on public.user_data for update using (auth.uid() = user_id);
+```
+
+In Supabase **Authentication → URL Configuration**, set the Site URL to the deployed site and add it (plus any local dev URL) to Redirect URLs. Without the env vars, the app runs exactly as before with no sign-in.
 
 ## Getting Started
 
