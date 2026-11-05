@@ -16,6 +16,8 @@ import {
 import Landing from './Landing.jsx';
 import { LogoMark } from './Logo.jsx';
 import OutlineModal from './OutlineModal.jsx';
+import AccountModal, { SyncButton, ConflictModal } from './AccountModal.jsx';
+import { useCloudSync, arrivedFromSignInLink } from './cloudSync.js';
 import CourseView from './CourseView.jsx';
 import TermOverview from './TermOverview.jsx';
 import RequirementsPanel from './RequirementsPanel.jsx';
@@ -110,7 +112,8 @@ const makeCourse = () => ({
 });
 
 const McMasterApp = () => {
-    const [view, setView] = useState('start');
+    // Coming back from an emailed sign-in link goes straight to the grades
+    const [view, setView] = useState(() => (arrivedFromSignInLink() ? 'dashboard' : 'start'));
     const [tab, setTab] = useState('course');
     const [terms, setTerms] = useState(() => loadJSON(TERMS_KEY, []));
     const [profile, setProfile] = useState(() => ({ ...DEFAULT_PROFILE, ...loadJSON(PROFILE_KEY, {}) }));
@@ -125,7 +128,21 @@ const McMasterApp = () => {
     const [newTerm, setNewTerm] = useState(currentSession);
     const [importTarget, setImportTarget] = useState(null); // { componentId, mode: 'text' | 'ocr' }
     const [showOutline, setShowOutline] = useState(false);
+    const [showAccount, setShowAccount] = useState(false);
     const backupInputRef = useRef(null);
+
+    // Account sync (optional) - mirrors terms/profile/settings to the signed-in user's cloud copy
+    const syncData = useMemo(() => ({ terms, profile, settings }), [terms, profile, settings]);
+    const cloud = useCloudSync({
+        data: syncData,
+        applyData: (snapshot) => {
+            const nextTerms = Array.isArray(snapshot.terms) ? snapshot.terms : [];
+            setTerms(nextTerms);
+            setProfile({ ...DEFAULT_PROFILE, ...snapshot.profile });
+            setSettings({ ...DEFAULT_SETTINGS, ...snapshot.settings });
+            setActiveTermId(id => (nextTerms.some(t => t.id === id) ? id : sortTerms(nextTerms)[nextTerms.length - 1]?.id || null));
+        },
+    });
 
     // Autosave - the McMaster calculator keeps everything in this browser
     useEffect(() => { saveJSON(TERMS_KEY, terms); }, [terms]);
@@ -299,13 +316,21 @@ const McMasterApp = () => {
         </p>
     );
 
-    const outlineModal = showOutline && (
-        <OutlineModal
-            activeCourse={tab === 'course' ? activeCourse : null}
-            defaultTerm={activeTerm ? { session: activeTerm.session, year: parseInt(activeTerm.year) } : currentSession()}
-            onClose={() => setShowOutline(false)}
-            onApply={applyOutline}
-        />
+    const outlineModal = (
+        <>
+            {showOutline && (
+                <OutlineModal
+                    activeCourse={tab === 'course' ? activeCourse : null}
+                    defaultTerm={activeTerm ? { session: activeTerm.session, year: parseInt(activeTerm.year) } : currentSession()}
+                    onClose={() => setShowOutline(false)}
+                    onApply={applyOutline}
+                />
+            )}
+            {showAccount && <AccountModal cloud={cloud} onClose={() => setShowAccount(false)} />}
+            {cloud.conflict && (
+                <ConflictModal conflict={cloud.conflict} local={syncData} onResolve={cloud.resolveConflict} onExport={handleExport} />
+            )}
+        </>
     );
 
     // --- RENDERING LANDING PAGE ---
@@ -316,6 +341,8 @@ const McMasterApp = () => {
                     onOpen={(toTab) => { if (toTab) setTab(toTab); setView('dashboard'); }}
                     onImportOutline={() => { setView('dashboard'); setShowOutline(true); }}
                     summary={{ cgpa: reqCtx.cgpa, courses: allCourses(terms).length, degree: profile.degree, program: profile.program }}
+                    cloud={cloud}
+                    onAccount={() => setShowAccount(true)}
                 />
                 {outlineModal}
             </>
@@ -400,6 +427,7 @@ const McMasterApp = () => {
 
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
+                            <SyncButton cloud={cloud} onClick={() => setShowAccount(true)} />
                             <button
                                 onClick={() => setShowOutline(true)}
                                 className="flex items-center gap-2 px-4 py-2 bg-mac-maroon text-white rounded-lg hover:bg-mac-maroon-dark transition-all shadow-md text-sm font-bold whitespace-nowrap"
