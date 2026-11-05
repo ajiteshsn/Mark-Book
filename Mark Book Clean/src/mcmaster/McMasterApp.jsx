@@ -1,22 +1,21 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-    GraduationCap,
     Plus,
     Trash2,
     BookOpen,
-    LogOut,
     Save,
     Download,
     FolderOpen,
-    ChevronRight,
+    FileUp,
     Calendar,
-    Cloud,
     ShieldCheck,
     LineChart as LineChartIcon,
-    Target,
     Check,
     X,
 } from 'lucide-react';
+import Landing from './Landing.jsx';
+import { LogoMark } from './Logo.jsx';
+import OutlineModal from './OutlineModal.jsx';
 import CourseView from './CourseView.jsx';
 import TermOverview from './TermOverview.jsx';
 import RequirementsPanel from './RequirementsPanel.jsx';
@@ -32,11 +31,10 @@ import {
     NON_GPA_STATUSES,
 } from './gpa.js';
 
-// McMaster data lives under its own keys - the Ontario keys (markbook_*) are never written here
+// Everything is stored in this browser under these keys
 const TERMS_KEY = 'mcmaster_terms';
 const PROFILE_KEY = 'mcmaster_profile';
 const SETTINGS_KEY = 'mcmaster_settings';
-const ONTARIO_AUTH_KEY = 'markbook_auth';
 
 const DEFAULT_PROFILE = {
     degree: 'B.Tech',
@@ -126,9 +124,8 @@ const McMasterApp = () => {
     const [showAddTerm, setShowAddTerm] = useState(false);
     const [newTerm, setNewTerm] = useState(currentSession);
     const [importTarget, setImportTarget] = useState(null); // { componentId, mode: 'text' | 'ocr' }
+    const [showOutline, setShowOutline] = useState(false);
     const backupInputRef = useRef(null);
-
-    const ontarioUser = useMemo(() => loadJSON(ONTARIO_AUTH_KEY, null), []);
 
     // Autosave - the McMaster calculator keeps everything in this browser
     useEffect(() => { saveJSON(TERMS_KEY, terms); }, [terms]);
@@ -271,7 +268,30 @@ const McMasterApp = () => {
         setImportTarget(null);
     };
 
-    const importComponentName = activeCourse?.components.find(c => c.id === importTarget?.componentId)?.name || 'component';
+    // Course outline import: fill the current course, or add a new one to the outline's term
+    const applyOutline = ({ mode, term, components, ...details }) => {
+        const patch = components.length ? { ...details, components } : details;
+        if (mode === 'replace' && activeTerm && activeCourse) {
+            updateCourse(activeTerm.id, activeCourse.id, c => ({ ...c, ...patch }));
+            flash('Course outline applied!', 3000);
+        } else {
+            let target = terms.find(t => t.session === term.session && parseInt(t.year) === term.year);
+            if (!target) {
+                target = makeTerm(term.session, term.year);
+                setTerms(prev => [...prev, target]);
+            }
+            const course = { ...makeCourse(), ...patch };
+            updateTerm(target.id, t => ({ ...t, courses: [...t.courses, course] }));
+            setActiveTermId(target.id);
+            setActiveCourseId(course.id);
+            flash(`Added ${details.code || 'course'} to ${target.name}`, 3000);
+        }
+        setTab('course');
+        setView('dashboard');
+        setShowOutline(false);
+    };
+
+    const importComponentName =activeCourse?.components.find(c => c.id === importTarget?.componentId)?.name || 'component';
 
     const footer = (
         <p className="mt-10 mb-16 text-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] opacity-60">
@@ -279,71 +299,26 @@ const McMasterApp = () => {
         </p>
     );
 
-    // --- RENDERING START SCREEN ---
+    const outlineModal = showOutline && (
+        <OutlineModal
+            activeCourse={tab === 'course' ? activeCourse : null}
+            defaultTerm={activeTerm ? { session: activeTerm.session, year: parseInt(activeTerm.year) } : currentSession()}
+            onClose={() => setShowOutline(false)}
+            onApply={applyOutline}
+        />
+    );
+
+    // --- RENDERING LANDING PAGE ---
     if (view === 'start') {
-        const cum = reqCtx.cgpa;
         return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-900 font-sans">
-                <div className="max-w-md w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
-                    <div className="h-2 bg-mac-gold"></div>
-                    <div className="p-10 flex flex-col items-center text-center">
-                        <div className="w-20 h-20 bg-mac-maroon rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-mac-maroon/30">
-                            <GraduationCap className="text-mac-gold" size={40} />
-                        </div>
-                        <h1 className="text-3xl font-black tracking-tight mb-1">McMaster Grade Calculator</h1>
-                        <p className="text-[10px] font-black text-mac-maroon uppercase tracking-widest mb-3">Mark Book · University Edition</p>
-                        <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-                            Course grades, 12-point GPA, CGPA and program requirements for McMaster students.
-                        </p>
-
-                        <div className="w-full space-y-4 mb-10">
-                            <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                <div className="bg-mac-maroon-light p-2.5 rounded-xl text-mac-maroon">
-                                    <Target size={20} />
-                                </div>
-                                <div className="text-left">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">12-Point Scale</p>
-                                    <p className="text-xs font-semibold">A+ = 12 · Syllabus-weighted courses</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-4 bg-mac-gold-light p-4 rounded-2xl border border-mac-gold/50">
-                                <div className="bg-mac-gold p-2.5 rounded-xl text-mac-maroon-dark">
-                                    <ShieldCheck size={20} />
-                                </div>
-                                <div className="text-left flex-1">
-                                    <p className="text-[10px] font-bold text-mac-maroon uppercase tracking-widest">{profile.degree} · {profile.coop ? 'Co-op' : 'Non co-op'}</p>
-                                    <p className="text-xs font-semibold">{profile.program}</p>
-                                </div>
-                                {cum !== null && (
-                                    <div className="text-right">
-                                        <p className="text-[10px] font-bold text-mac-maroon uppercase tracking-widest">CGPA</p>
-                                        <p className="text-lg font-black text-mac-maroon leading-none">{cum.toFixed(2)}</p>
-                                    </div>
-                                )}
-                            </div>
-                            {ontarioUser && (
-                                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                    <div className="bg-slate-200 p-2.5 rounded-xl text-slate-500">
-                                        <Cloud size={20} />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Logged in as {ontarioUser.username}</p>
-                                        <p className="text-xs font-semibold text-slate-500">McMaster data is saved on this device — cloud sync coming soon</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <button
-                            onClick={() => setView('dashboard')}
-                            className="w-full bg-mac-maroon text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-mac-maroon-dark transition-all shadow-lg shadow-mac-maroon/20 active:scale-95"
-                        >
-                            Open Grade Calculator <ChevronRight size={20} />
-                        </button>
-                    </div>
-                </div>
-                {footer}
-            </div>
+            <>
+                <Landing
+                    onOpen={(toTab) => { if (toTab) setTab(toTab); setView('dashboard'); }}
+                    onImportOutline={() => { setView('dashboard'); setShowOutline(true); }}
+                    summary={{ cgpa: reqCtx.cgpa, courses: allCourses(terms).length, degree: profile.degree, program: profile.program }}
+                />
+                {outlineModal}
+            </>
         );
     }
 
@@ -357,10 +332,10 @@ const McMasterApp = () => {
                     <div className="flex items-center gap-3 overflow-x-auto pb-2 flex-1">
                         <button
                             onClick={() => setView('start')}
-                            className="p-2 mr-1 text-slate-400 hover:text-mac-maroon hover:bg-white rounded-lg transition-all shrink-0"
-                            title="Exit to Start"
+                            className="mr-1 shrink-0 rounded-xl hover:scale-105 transition-transform"
+                            title="Back to home"
                         >
-                            <LogOut size={20} />
+                            <LogoMark size={38} />
                         </button>
 
                         {/* Term selector */}
@@ -426,6 +401,14 @@ const McMasterApp = () => {
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
                             <button
+                                onClick={() => setShowOutline(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-mac-maroon text-white rounded-lg hover:bg-mac-maroon-dark transition-all shadow-md text-sm font-bold whitespace-nowrap"
+                                title="Import a course outline (PDF, Word, image or text)"
+                            >
+                                <FileUp size={16} />
+                                <span className="hidden sm:inline">Import Outline</span>
+                            </button>
+                            <button
                                 onClick={handleSave}
                                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-md text-sm font-bold"
                                 title="Save to browser (also saves automatically)"
@@ -451,12 +434,6 @@ const McMasterApp = () => {
                             {saveStatus && (
                                 <span className="text-green-600 text-sm font-bold animate-pulse">{saveStatus}</span>
                             )}
-                        </div>
-                        <div className="text-right">
-                            <h1 className="text-xl font-bold text-slate-900 leading-tight flex items-center justify-end gap-2 whitespace-nowrap">
-                                <GraduationCap className="text-mac-maroon" size={20} /> McMaster
-                            </h1>
-                            <p className="text-[10px] font-bold text-mac-maroon uppercase tracking-widest whitespace-nowrap">12-Point GPA Model</p>
                         </div>
                     </div>
                 </header>
@@ -487,6 +464,7 @@ const McMasterApp = () => {
                             onChange={(updater) => updateCourse(activeTerm.id, activeCourse.id, updater)}
                             onOpenImport={(componentId) => setImportTarget({ componentId, mode: 'text' })}
                             onOpenOcr={(componentId) => setImportTarget({ componentId, mode: 'ocr' })}
+                            onOpenOutline={() => setShowOutline(true)}
                         />
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -495,14 +473,22 @@ const McMasterApp = () => {
                             </div>
                             <h2 className="text-2xl font-bold text-slate-700 mb-2">No Courses {activeTerm ? `in ${activeTerm.name}` : 'Yet'}</h2>
                             <p className="text-slate-500 mb-8 max-w-md">
-                                Add a course, then set its components to match the grading breakdown in your course outline.
+                                Import your course outline to set everything up automatically, or add a course and enter its grading breakdown yourself.
                             </p>
-                            <button
-                                onClick={addCourse}
-                                className="bg-mac-maroon text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-mac-maroon-dark transition-all shadow-lg shadow-mac-maroon/20"
-                            >
-                                <Plus size={20} /> Add Your First Course
-                            </button>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button
+                                    onClick={() => setShowOutline(true)}
+                                    className="bg-mac-maroon text-white font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-mac-maroon-dark transition-all shadow-lg shadow-mac-maroon/20"
+                                >
+                                    <FileUp size={20} /> Import Course Outline
+                                </button>
+                                <button
+                                    onClick={addCourse}
+                                    className="bg-white text-mac-maroon font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2 border-2 border-mac-maroon/20 hover:border-mac-maroon transition-all"
+                                >
+                                    <Plus size={20} /> Add Manually
+                                </button>
+                            </div>
                         </div>
                     )
                 )}
@@ -536,6 +522,7 @@ const McMasterApp = () => {
             {importTarget?.mode === 'ocr' && (
                 <OcrModal componentName={importComponentName} onClose={() => setImportTarget(null)} onImport={handleItemsImport} />
             )}
+            {outlineModal}
         </div>
     );
 };

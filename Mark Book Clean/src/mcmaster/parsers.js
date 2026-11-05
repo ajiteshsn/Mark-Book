@@ -1,5 +1,4 @@
-// Text-import and OCR parsers, copied from the Ontario mark book (src/ontario/OntarioApp.jsx)
-// as pure functions so the Ontario app stays untouched. Results use `name` instead of `cat`.
+// Text-import and OCR parsers for marks pasted or scanned into a course component.
 
 const newId = () => Date.now() + Math.random();
 

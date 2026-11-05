@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import Tesseract from 'tesseract.js';
 import { X, Check, Trash2, FileText, AlertCircle, Image as ImageIcon } from 'lucide-react';
 import { parseOcrText } from './parsers.js';
 
@@ -37,6 +36,7 @@ const OcrModal = ({ componentName, onClose, onImport }) => {
         setError('');
         setResults([]);
         try {
+            const { default: Tesseract } = await import('tesseract.js');
             const result = await Tesseract.recognize(image, 'eng', {
                 logger: (m) => {
                     if (m.status === 'recognizing text') setProgress(Math.round(m.progress * 100));

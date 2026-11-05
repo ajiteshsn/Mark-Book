@@ -10,6 +10,7 @@ import {
     Target,
     TrendingUp,
     AlertCircle,
+    FileUp,
     Image as ImageIcon,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
@@ -23,7 +24,7 @@ const STATUS_OPTIONS = [
     { value: 'transfer', label: 'Transfer credit' },
 ];
 
-const CourseView = ({ course, settings, onChange, onOpenImport, onOpenOcr }) => {
+const CourseView = ({ course, settings, onChange, onOpenImport, onOpenOcr, onOpenOutline }) => {
     const stats = useMemo(() => courseStats(course), [course]);
     const final = useMemo(() => courseFinal(course, settings), [course, settings]);
     const targetPct = letterLowerBound(course.targetLetter) ?? 80;
@@ -110,6 +111,20 @@ const CourseView = ({ course, settings, onChange, onOpenImport, onOpenOcr }) => 
                                 className="w-full border border-slate-200 rounded-lg p-2 text-sm font-bold uppercase outline-none focus:border-mac-maroon"
                             />
                         </div>
+                        <div className="col-span-2 md:col-span-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1 flex items-center justify-between">
+                                Course Title
+                                <button onClick={onOpenOutline} className="normal-case tracking-normal text-mac-maroon hover:underline flex items-center gap-1 font-bold">
+                                    <FileUp size={11} /> Fill from course outline
+                                </button>
+                            </label>
+                            <input
+                                value={course.name ?? ''}
+                                onChange={(e) => update({ name: e.target.value })}
+                                placeholder="Introduction to Programming"
+                                className="w-full border border-slate-200 rounded-lg p-2 text-sm font-medium outline-none focus:border-mac-maroon"
+                            />
+                        </div>
                         <div>
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Units</label>
                             <input
@@ -128,7 +143,7 @@ const CourseView = ({ course, settings, onChange, onOpenImport, onOpenOcr }) => 
                                 {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </div>
-                        <div className="col-span-2 md:col-span-1">
+                        <div className="col-span-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1" title="Optional: the official grade from Mosaic. Overrides the calculator.">Official Final</label>
                             <input
                                 value={course.manualFinal ?? ''}
